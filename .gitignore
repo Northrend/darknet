@@ -5,9 +5,12 @@
 *.png
 *.jpg
 *.pyc
+*.log
 old/
 mnist/
 data/
+weights/
+backup/
 caffe/
 grasp/
 images/
