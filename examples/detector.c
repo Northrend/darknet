@@ -61,7 +61,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     //while(i*imgs < N*120){
     while(get_current_batch(net) < net->max_batches){
         if(l.random && count++%10 == 0){
-            printf("Resizing\n");
+            printf("Resizing to: ");
             int dim = (rand() % 10 + 10) * 32;
             if (get_current_batch(net)+200 > net->max_batches) dim = 608;
             //int dim = (rand() % 4 + 16) * 32;
@@ -127,7 +127,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 
         i = get_current_batch(net);
         //printf("%ld: %f, %f avg, %f rate, %lf seconds, %d images\n", get_current_batch(net), loss, avg_loss, get_current_rate(net), what_time_is_it_now()-time, i*imgs);
-        printf("Batch[%ld]: loss=%.6f, avg_loss=%.6f, lr=%.6f, time=%.4lf sec, imgs=%d\n", get_current_batch(net), loss, avg_loss, get_current_rate(net), what_time_is_it_now()-time, i*imgs);
+        printf("Batch[%ld]: loss=%.4f, avg_loss=%.4f, lr=%.2e, time=%.2lf sec, imgs=%d\n", get_current_batch(net), loss, avg_loss, get_current_rate(net), what_time_is_it_now()-time, i*imgs);
         if(i%10000==0){
 #ifdef GPU
             if(ngpus != 1) sync_nets(nets, ngpus, 0);
@@ -561,13 +561,18 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
 }
 
 
-void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
+void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen, int gpu_id)
 {
     list *options = read_data_cfg(datacfg);
     char *name_list = option_find_str(options, "names", "data/names.list");
     char **names = get_labels(name_list);
 
     image **alphabet = load_alphabet();
+#ifdef GPU
+    char gpu_id_buffer [2];
+    sprintf(gpu_id_buffer, "%d", gpu_id);
+    cuda_set_device(gpu_id_buffer);
+#endif
     network *net = load_network(cfgfile, weightfile, 0);
     set_batch_network(net, 1);
     srand(2222222);
@@ -823,6 +828,7 @@ void run_detector(int argc, char **argv)
         gpus = &gpu;
         ngpus = 1;
     }
+    //printf("Working on gpu: %s\n", gpus);
 
     int clear = find_arg(argc, argv, "-clear");
     int fullscreen = find_arg(argc, argv, "-fullscreen");
@@ -835,7 +841,7 @@ void run_detector(int argc, char **argv)
     char *cfg = argv[4];
     char *weights = (argc > 5) ? argv[5] : 0;
     char *filename = (argc > 6) ? argv[6]: 0;
-    if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
+    if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen, gpus);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
     else if(0==strcmp(argv[2], "valid2")) validate_detector_flip(datacfg, cfg, weights, outfile);

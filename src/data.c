@@ -454,6 +454,8 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
     // ---- customized path ----
     find_replace(path, "train2017", "annotations_darknet_style/instances_train2017", labelpath);
     find_replace(labelpath, "val2017", "annotations_darknet_style/instances_val2017", labelpath);
+    find_replace(labelpath, "Image", "juggdet_0124/annotations_darknet_style", labelpath);
+    find_replace(labelpath, "==", "==.txt", labelpath);
     // ---- customized path ----
     find_replace(labelpath, ".jpg", ".txt", labelpath);
     find_replace(labelpath, ".png", ".txt", labelpath);

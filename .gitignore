@@ -6,6 +6,8 @@
 *.jpg
 *.pyc
 *.log
+*.so
+*.a
 old/
 mnist/
 data/
@@ -21,6 +23,7 @@ submission/
 cfg/
 darknet
 .fuse*
+Makefile
 
 # OS Generated #
 .DS_Store*
