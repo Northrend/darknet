@@ -12,6 +12,7 @@ old/
 mnist/
 data/
 weights/
+results/
 backup/
 caffe/
 grasp/

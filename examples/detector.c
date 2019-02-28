@@ -1,6 +1,24 @@
 #include "darknet.h"
+#include <string.h>
+
+// bluedomocha
+char *categories[] = {"suit","sun_glasses"};
+
+// coco
+// char *categories[] = {"person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"};
+
+// juggdet
+// char *categories[] = {"penis","vulva","sex","tits","breasts","nipples","ass","tback","anus"};
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
+
+
+char *basename(char const *path)
+{
+    char *s = strrchr(path, '/');
+    if (!s) return strdup(path);
+    else return strdup(s + 1);
+}
 
 
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear)
@@ -190,6 +208,56 @@ static void print_cocos(FILE *fp, char *image_path, detection *dets, int num_box
     }
 }
 
+static void print_dummy(FILE *fp, char *image_path, detection *dets, int num_boxes, int classes, int w, int h)
+{
+    int i, j;
+    // only for coco data, ridiculous
+    // int image_id = get_coco_image_id(image_path);
+    // fprintf(fp, "  \"%012d.jpg\": [\n", image_id);
+    // use basename
+    image_path=basename(image_path);
+    fprintf(fp, "  \"%s\": [\n", image_path);
+    int first_box = 1;
+    for(i = 0; i < num_boxes; ++i){
+        float xmin = dets[i].bbox.x - dets[i].bbox.w/2.;
+        float xmax = dets[i].bbox.x + dets[i].bbox.w/2.;
+        float ymin = dets[i].bbox.y - dets[i].bbox.h/2.;
+        float ymax = dets[i].bbox.y + dets[i].bbox.h/2.;
+
+        if (xmin < 0) xmin = 0;
+        if (ymin < 0) ymin = 0;
+        if (xmax > w) xmax = w;
+        if (ymax > h) ymax = h;
+
+        for(j = 0; j < classes; ++j){
+            //if (dets[i].prob[j]) fprintf(fp, "{\"image_id\":%d, \"category_id\":%d, \"bbox\":[%f, %f, %f, %f], \"score\":%f},\n", image_id, coco_ids[j], bx, by, bw, bh, dets[i].prob[j]);
+            if (dets[i].prob[j]){
+                if (first_box){
+                    fprintf(fp, "    [\n");
+                    fprintf(fp, "      %.6f,\n", xmin);
+                    fprintf(fp, "      %.6f,\n", ymin);
+                    fprintf(fp, "      %.6f,\n", xmax);
+                    fprintf(fp, "      %.6f,\n", ymax);
+                    fprintf(fp, "      %.6f,\n", dets[i].prob[j]);
+                    fprintf(fp, "      \"%s\"\n", categories[j]);
+                    fprintf(fp, "    ]");
+                } else{
+                    fprintf(fp, ",\n    [\n");
+                    fprintf(fp, "      %.6f,\n", xmin);
+                    fprintf(fp, "      %.6f,\n", ymin);
+                    fprintf(fp, "      %.6f,\n", xmax);
+                    fprintf(fp, "      %.6f,\n", ymax);
+                    fprintf(fp, "      %.6f,\n", dets[i].prob[j]);
+                    fprintf(fp, "      \"%s\"\n", categories[j]);
+                    fprintf(fp, "    ]");
+                }
+                first_box = 0;
+            }
+        }
+    }
+    fprintf(fp, "\n  ],\n");
+}
+
 void print_detector_detections(FILE **fps, char *id, detection *dets, int total, int classes, int w, int h)
 {
     int i, j;
@@ -363,7 +431,7 @@ void validate_detector_flip(char *datacfg, char *cfgfile, char *weightfile, char
 }
 
 
-void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile)
+void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile, float thresh)
 {
     int j;
     list *options = read_data_cfg(datacfg);
@@ -392,6 +460,8 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     FILE **fps = 0;
     int coco = 0;
     int imagenet = 0;
+    int dummy = 0;  // eval type flag
+    printf("=> Validation type: %s\n", type);
     if(0==strcmp(type, "coco")){
         if(!outfile) outfile = "coco_results";
         snprintf(buff, 1024, "%s/%s.json", prefix, outfile);
@@ -404,6 +474,12 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
         fp = fopen(buff, "w");
         imagenet = 1;
         classes = 200;
+    } else if(0==strcmp(type, "dummy")){
+        if(!outfile) outfile = "dummy_test_results";
+        snprintf(buff, 1024, "%s/%s.json", prefix, outfile);
+        fp = fopen(buff, "w");
+        fprintf(fp, "{\n");
+        dummy = 1;
     } else {
         if(!outfile) outfile = "comp4_det_test_";
         fps = calloc(classes, sizeof(FILE *));
@@ -413,15 +489,14 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
         }
     }
 
-
     int m = plist->size;
     int i=0;
     int t;
 
-    float thresh = .005;
+    //float thresh = .005;
     float nms = .45;
 
-    int nthreads = 4;
+    int nthreads = 8;
     image *val = calloc(nthreads, sizeof(image));
     image *val_resized = calloc(nthreads, sizeof(image));
     image *buf = calloc(nthreads, sizeof(image));
@@ -442,7 +517,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     }
     double start = what_time_is_it_now();
     for(i = nthreads; i < m+nthreads; i += nthreads){
-        fprintf(stderr, "%d\n", i);
+        if ((i/nthreads)%10==0) fprintf(stderr, "Image [%d]...\n", i);
         for(t = 0; t < nthreads && i+t-nthreads < m; ++t){
             pthread_join(thr[t], 0);
             val[t] = buf[t];
@@ -466,6 +541,8 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
             if (nms) do_nms_sort(dets, nboxes, classes, nms);
             if (coco){
                 print_cocos(fp, path, dets, nboxes, classes, w, h);
+            } else if (dummy){
+                print_dummy(fp, path, dets, nboxes, classes, w, h);
             } else if (imagenet){
                 print_imagenet_detections(fp, i+t-nthreads+1, dets, nboxes, classes, w, h);
             } else {
@@ -483,6 +560,10 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
     if(coco){
         fseek(fp, -2, SEEK_CUR); 
         fprintf(fp, "\n]\n");
+        fclose(fp);
+    } else if (dummy){
+        fseek(fp, -2, SEEK_CUR); 
+        fprintf(fp, "}\n");
         fclose(fp);
     }
     fprintf(stderr, "Total Detection Time: %f Seconds\n", what_time_is_it_now() - start);
@@ -568,11 +649,12 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     char **names = get_labels(name_list);
 
     image **alphabet = load_alphabet();
-#ifdef GPU
-    char gpu_id_buffer [2];
-    sprintf(gpu_id_buffer, "%d", gpu_id);
-    cuda_set_device(gpu_id_buffer);
-#endif
+//    printf("FLAG1\n")
+//#ifdef GPU
+//    char gpu_id_buffer [2];
+//    sprintf(gpu_id_buffer, "%d", gpu_id);
+//    cuda_set_device(gpu_id_buffer);
+//#endif
     network *net = load_network(cfgfile, weightfile, 0);
     set_batch_network(net, 1);
     srand(2222222);
@@ -843,7 +925,7 @@ void run_detector(int argc, char **argv)
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen, gpus);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
-    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
+    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh);
     else if(0==strcmp(argv[2], "valid2")) validate_detector_flip(datacfg, cfg, weights, outfile);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(cfg, weights);
     else if(0==strcmp(argv[2], "demo")) {

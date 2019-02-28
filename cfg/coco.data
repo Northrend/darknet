@@ -6,5 +6,5 @@ valid  = data/coco/val2017_img.lst
 # valid = data/coco_val_5k.list
 names = data/coco.names
 backup = backup/
-eval=coco
-
+# eval=coco
+eval=dummy
